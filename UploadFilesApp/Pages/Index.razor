@@ -1,12 +1,30 @@
 ﻿@page "/"
+@using UploadFilesApp.Data;
 @inject IConfiguration config
 
 <PageTitle>Upload Demo App</PageTitle>
 
 <h1>Upload Demo</h1>
 
+@*ne trebamo stavljati @ u Blayzor*@
+<EditForm Model="newCustomer" OnValidSubmit="SubmitForm">
+    <div>
+        <label for="firstName">First Name</label>
+        <InputText id="firstName" class="form-control" @bind-Value="newCustomer.FirstName" />
+    </div>
+    <div>
+        <label for="lastName">Last Name</label>
+        <InputText id="lastName" class="form-control" @bind-Value="newCustomer.LastName" />
+    </div>
+    <div>
+        <label for="profilePicture">Profile picture:</label>
+        <InputFile OnChange="@LoadFiles" class="form-control"  accept=".png,.jpg,.jpeg" />
+    </div>
+    <button class="btn btn-primary mt-3" type="submit">Create Customer</button>
+</EditForm>
+
 @*unosimo vise fajlova - multiple, accept- odredjujemo koje fajlove mozemo uplodovati*@
-<InputFile OnChange="@LoadFiles" multiple accept=".png,.jpg,.jpeg"/>
+@*<InputFile OnChange="@LoadFiles" class="form-control" multiple accept=".txt,.png,.jpg,.jpeg"/>*@
 
 
 @if (errors.Count > 0)
@@ -24,45 +42,71 @@
     private long maxFileSize = 1024 * 1024 * 3; //3mb
     private int maxAllowedFiles = 3;
     private List<string> errors = new();
+    private CustomerModel newCustomer = new();
+    private IBrowserFile? file;
 
-    // kad izaberemo fajlove (InputFile), pokrecemo ovu funkciju
-    private async Task LoadFiles(InputFileChangeEventArgs e)
+    private async Task SubmitForm()
     {
-        // brisemo sve errore na pocetku
-        errors.Clear();
-
-        if (e.FileCount > maxAllowedFiles)
+        try
         {
-            errors.Add($"Error: Attemptiong to upload {e.FileCount} files, but only {maxAllowedFiles} fileas are allowed.");
-            //kad imamo error, zatvaramo funkciju
-            return;
+            string relativePath = await CaptureFile();
+            newCustomer.FileName = relativePath;
         }
-
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        catch (Exception ex)
         {
-            try
-            {
-                string newFileName = Path.ChangeExtension(
-                Path.GetRandomFileName(),// dajemo random ime fajlu
-                Path.GetExtension(file.Name));
-
-                string path = Path.Combine(
-                    config.GetValue<string>("FileStorage")!,
-                    "iggy",
-                    newFileName);
-
-                Directory.CreateDirectory(Path.Combine(
-                    config.GetValue<string>("FileStorage")!,
-                    "iggy"));
-
-                await using FileStream fs = new(path, FileMode.Create);
-                //openning readStream maxFileSize, and copy async to FileStream
-                await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
-            }
-            catch (Exception ex)
-            {
-                errors.Add($"File: {file.Name} Error: {ex.Message}");
-            }
+            errors.Add($"Error: {ex.Message}");
         }
     }
+
+
+    // kad izaberemo fajlove (InputFile), pokrecemo ovu funkciju
+    private void LoadFiles(InputFileChangeEventArgs e)
+    {
+        file = e.File;
+    }
+
+    private async Task<string> CaptureFile()
+    {
+        if (file is null)
+        {
+            return ""; // stavljamo empty string in 
+        }
+
+        //if (e.FileCount > maxAllowedFiles)
+        //{
+        //    errors.Add($"Error: Attemptiong to upload {e.FileCount} files, but only {maxAllowedFiles} fileas are allowed.");
+        //    //kad imamo error, zatvaramo funkciju
+        //    return;
+        //}
+
+        try
+        {
+            string newFileName = Path.ChangeExtension(
+            Path.GetRandomFileName(),// dajemo random ime fajlu
+            Path.GetExtension(file.Name));
+
+            string path = Path.Combine(
+                config.GetValue<string>("FileStorage")!,
+                "iggy",
+                newFileName);
+
+            string relativePath = Path.Combine("iggy", newFileName);
+
+            Directory.CreateDirectory(Path.Combine(
+                config.GetValue<string>("FileStorage")!,
+                "iggy"));
+
+            await using FileStream fs = new(path, FileMode.Create);
+            //openning readStream maxFileSize, and copy async to FileStream
+            await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
+
+            return relativePath;
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"File: {file.Name} Error: {ex.Message}");
+            throw;
+        }
+        
+    }   
 }
